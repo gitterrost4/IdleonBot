@@ -7,19 +7,17 @@ import java.util.stream.Collectors;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import de.gitterrost4.botlib.containers.ChoiceMenu;
-import de.gitterrost4.botlib.containers.CommandMessage;
-import de.gitterrost4.botlib.helpers.Catcher;
 import de.gitterrost4.botlib.containers.ChoiceMenu.ChoiceMenuBuilder;
 import de.gitterrost4.botlib.containers.ChoiceMenu.MenuEntry;
+import de.gitterrost4.botlib.containers.CommandMessage;
+import de.gitterrost4.botlib.helpers.Catcher;
 import de.gitterrost4.botlib.listeners.AbstractMessageListener;
 import de.gitterrost4.idleonbot.config.containers.ServerConfig;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
@@ -60,11 +58,11 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
         activeMenus.put(menu.display(event.getChannel()), menu);
       }
     } catch (IOException e) {
-      getLogger().error("Could not connect to the wiki at " + url);
+      getLogger().error("Could not connect to the wiki at " + url,e);
     }
   }
 
-  private void showRecipe(MessageReceivedEvent event, String baseUrl, MenuEntry menuEntry) {
+  private static void showRecipe(MessageReceivedEvent event, String baseUrl, MenuEntry menuEntry) {
     String itemUrl = baseUrl + menuEntry.getValue();
     Document doc = Catcher.wrap(() -> Jsoup.connect(itemUrl).get());
     String itemName = doc.selectFirst("#firstHeading").text();
