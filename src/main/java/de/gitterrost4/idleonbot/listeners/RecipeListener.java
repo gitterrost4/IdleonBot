@@ -37,27 +37,25 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
   protected void messageReceived(MessageReceivedEvent event, CommandMessage message) {
     String name = message.getArgOrThrow(0, true);
     String baseUrl = "https://idleon.info";
-    String url = baseUrl+"/w/index.php?sort=relevance&fulltext=1&search=" + name.replaceAll(" ", "+");
+    String url = baseUrl + "/w/index.php?sort=relevance&fulltext=1&search=" + name.replaceAll(" ", "+");
     try {
       Document searchDoc = Jsoup.connect(url).get();
       Elements h2 = searchDoc.select(".searchresults h2");
-      if(h2.size()==0) {
-        event.getChannel().sendMessage("Item '"+name+"' not found.").queue();
+      if (h2.size() == 0) {
+        event.getChannel().sendMessage("Item '" + name + "' not found.").queue();
         return;
       }
       Elements anchors = searchDoc.selectFirst(".searchresults ul").select("a");
-      if(anchors.size()==1) {
-        showRecipe(event,baseUrl,new MenuEntry(anchors.get(0).text(), anchors.get(0).attr("href")));
+      if (anchors.size() == 1) {
+        showRecipe(event, baseUrl, new MenuEntry(anchors.get(0).text(), anchors.get(0).attr("href")));
       } else {
         ChoiceMenuBuilder menuBuilder = ChoiceMenu.builder();
-        for(Element anchor:anchors) {
-          menuBuilder.addEntry(new MenuEntry(anchor.text(), anchor.attr("href")));
-        }
-        menuBuilder.setChoiceHandler(menuEntry->{
+        anchors.stream().forEach(anchor->menuBuilder.addEntry(new MenuEntry(anchor.text(), anchor.attr("href"))));
+        menuBuilder.setChoiceHandler(menuEntry -> {
           showRecipe(event, baseUrl, menuEntry);
         });
         menuBuilder.setTitle("Recipe Search");
-  
+
         ChoiceMenu menu = menuBuilder.build();
         activeMenus.put(menu.display(event.getChannel()), menu);
       }
@@ -67,35 +65,30 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
   }
 
   private void showRecipe(MessageReceivedEvent event, String baseUrl, MenuEntry menuEntry) {
-    String itemUrl = baseUrl+menuEntry.getValue();
-    Document doc = Catcher.wrap(()->Jsoup.connect(itemUrl).get());
+    String itemUrl = baseUrl + menuEntry.getValue();
+    Document doc = Catcher.wrap(() -> Jsoup.connect(itemUrl).get());
     String itemName = doc.selectFirst("#firstHeading").text();
     Elements rows = doc.select(".forgeslot tr");
-    if(rows.size()==0) {
-      event.getChannel().sendMessage("Item '"+menuEntry.getDisplay()+"' does not appear to have a recipe.").queue();
+    if (rows.size() == 0) {
+      event.getChannel().sendMessage("Item '" + menuEntry.getDisplay() + "' does not appear to have a recipe.").queue();
       return;
     }
-    String from = null;
-    Map<String, String> ingredients = new HashMap<>();
-    for (Element row : rows) {
-      Elements tds = row.select("td");
-      if (tds.size() == 2) {
-        if (!tds.get(0).text().startsWith("Anvil Tab")) {
-          if (tds.get(0).text().equals("Recipe From")) {
-            from = tds.get(1).text();
-          } else {
-            ingredients.put(tds.get(0).text(), tds.get(1).text());
-          }
-        }
-        getLogger().info(tds.get(0).text() + " " + tds.get(1).text());
-      }
-    }
-    event.getChannel().sendMessage(new EmbedBuilder()
-        .addField("Item", itemName,false)
-        .addField("Ingredients", ingredients.entrySet().stream()
-            .map(e -> "- " + e.getKey() + " " + e.getValue()).collect(Collectors.joining("\n")),false)
-        .addField("Recipe From", from, false).build()).queue();
+    Map<String, String> ingredients = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
+        .filter(tds -> !tds.get(0).text().startsWith("Anvil Tab") && !tds.get(0).text().startsWith("Recipe From"))
+        .collect(Collectors.toMap(tds -> tds.get(0).text(), tds -> tds.get(1).text()));
+    String from = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
+        .filter(tds -> tds.get(0).text().startsWith("Recipe From")).findFirst().map(tds->tds.get(1).text()).orElse("");
+    String imageUrl = doc.select(".infobox-image img").attr("src");
+    event.getChannel()
+        .sendMessage(new EmbedBuilder()
+            .addField("Ingredients", ingredients.entrySet().stream()
+                .map(e -> "- " + e.getKey() + " " + e.getValue()).collect(Collectors.joining("\n")), false)
+            .addField("Recipe From", from, false)
+            .setAuthor(itemName, itemUrl, imageUrl)
+            .build())
+        .queue();
   }
+
   @Override
   protected void messageReactionAdd(MessageReactionAddEvent event) {
     super.messageReactionAdd(event);
@@ -103,7 +96,7 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       activeMenus.get(event.getMessageId()).handleReaction(event);
     }
   }
-  
+
   @Override
   protected String shortInfoInternal() {
     return "Display an item's recipe";
@@ -121,11 +114,8 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
 
   @Override
   protected String examplesInternal() {
-    return commandString("Iron Boots")+"\n"
-        + "Show the recipe for Iron Boots.\n"
-        + commandString("Boots")+"\n"
+    return commandString("Iron Boots") + "\n" + "Show the recipe for Iron Boots.\n" + commandString("Boots") + "\n"
         + "Show a selection of Boots to choose from.";
   }
-
 
 }

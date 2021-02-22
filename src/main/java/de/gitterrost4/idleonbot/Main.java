@@ -22,7 +22,7 @@ public class Main extends ListenerAdapter {
   public static void main(String[] args) throws LoginException, InterruptedException {
     Logger logger = LoggerFactory.getLogger(Main.class);
     logger.warn("--------------Starting IdleonBot--------------\n");
-    JDA jda = JDABuilder.createDefault(Config.getToken()).setActivity(Activity.playing("Use #help for info.")).setMemberCachePolicy(MemberCachePolicy.ALL).setChunkingFilter(ChunkingFilter.ALL).enableIntents(GatewayIntent.GUILD_MEMBERS).build().awaitReady();
+    JDA jda = JDABuilder.createDefault(Config.getToken()).setActivity(Activity.playing("Use %help for info.")).setMemberCachePolicy(MemberCachePolicy.ALL).setChunkingFilter(ChunkingFilter.ALL).enableIntents(GatewayIntent.GUILD_MEMBERS).build().awaitReady();
     Config.getConfig().getServers().stream().forEach(config -> {
       config.iAddServerModules(jda);
     });
