@@ -103,6 +103,29 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       activeMenus.get(event.getMessageId()).handleReaction(event);
     }
   }
+  
+  @Override
+  protected String shortInfoInternal() {
+    return "Display an item's recipe";
+  }
+
+  @Override
+  protected String usageInternal() {
+    return commandString("[SEARCHSTRING]");
+  }
+
+  @Override
+  protected String descriptionInternal() {
+    return "Display the recipe for an item as found on the idleon wiki. If SEARCHSTRING matches multiple items, you can interactively choose which one you want.";
+  }
+
+  @Override
+  protected String examplesInternal() {
+    return commandString("Iron Boots")+"\n"
+        + "Show the recipe for Iron Boots.\n"
+        + commandString("Boots")+"\n"
+        + "Show a selection of Boots to choose from.";
+  }
 
 
 }

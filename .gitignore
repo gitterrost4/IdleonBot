@@ -43,3 +43,4 @@ config*.yaml
 token.secret
 *.db
 *.log
+/bin/
