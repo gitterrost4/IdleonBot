@@ -1,0 +1,108 @@
+package de.gitterrost4.idleonbot.listeners;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+import de.gitterrost4.botlib.containers.ChoiceMenu;
+import de.gitterrost4.botlib.containers.CommandMessage;
+import de.gitterrost4.botlib.helpers.Catcher;
+import de.gitterrost4.botlib.containers.ChoiceMenu.ChoiceMenuBuilder;
+import de.gitterrost4.botlib.containers.ChoiceMenu.MenuEntry;
+import de.gitterrost4.botlib.listeners.AbstractMessageListener;
+import de.gitterrost4.idleonbot.config.containers.ServerConfig;
+import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
+
+public class RecipeListener extends AbstractMessageListener<ServerConfig> {
+
+  public Map<String, ChoiceMenu> activeMenus = new HashMap<>();
+
+  public RecipeListener(JDA jda, Guild guild, ServerConfig config) {
+    super(jda, guild, config, config.getRecipeConfig(), "recipe");
+    // TODO Auto-generated constructor stub
+  }
+
+  @Override
+  protected void messageReceived(MessageReceivedEvent event, CommandMessage message) {
+    String name = message.getArgOrThrow(0, true);
+    String baseUrl = "https://idleon.info";
+    String url = baseUrl+"/w/index.php?sort=relevance&fulltext=1&search=" + name.replaceAll(" ", "+");
+    try {
+      Document searchDoc = Jsoup.connect(url).get();
+      Elements h2 = searchDoc.select(".searchresults h2");
+      if(h2.size()==0) {
+        event.getChannel().sendMessage("Item '"+name+"' not found.").queue();
+        return;
+      }
+      Elements anchors = searchDoc.selectFirst(".searchresults ul").select("a");
+      if(anchors.size()==1) {
+        showRecipe(event,baseUrl,new MenuEntry(anchors.get(0).text(), anchors.get(0).attr("href")));
+      } else {
+        ChoiceMenuBuilder menuBuilder = ChoiceMenu.builder();
+        for(Element anchor:anchors) {
+          menuBuilder.addEntry(new MenuEntry(anchor.text(), anchor.attr("href")));
+        }
+        menuBuilder.setChoiceHandler(menuEntry->{
+          showRecipe(event, baseUrl, menuEntry);
+        });
+        menuBuilder.setTitle("Recipe Search");
+  
+        ChoiceMenu menu = menuBuilder.build();
+        activeMenus.put(menu.display(event.getChannel()), menu);
+      }
+    } catch (IOException e) {
+      getLogger().error("Could not connect to the wiki at " + url);
+    }
+  }
+
+  private void showRecipe(MessageReceivedEvent event, String baseUrl, MenuEntry menuEntry) {
+    String itemUrl = baseUrl+menuEntry.getValue();
+    Document doc = Catcher.wrap(()->Jsoup.connect(itemUrl).get());
+    String itemName = doc.selectFirst("#firstHeading").text();
+    Elements rows = doc.select(".forgeslot tr");
+    if(rows.size()==0) {
+      event.getChannel().sendMessage("Item '"+menuEntry.getDisplay()+"' does not appear to have a recipe.").queue();
+      return;
+    }
+    String from = null;
+    Map<String, String> ingredients = new HashMap<>();
+    for (Element row : rows) {
+      Elements tds = row.select("td");
+      if (tds.size() == 2) {
+        if (!tds.get(0).text().startsWith("Anvil Tab")) {
+          if (tds.get(0).text().equals("Recipe From")) {
+            from = tds.get(1).text();
+          } else {
+            ingredients.put(tds.get(0).text(), tds.get(1).text());
+          }
+        }
+        getLogger().info(tds.get(0).text() + " " + tds.get(1).text());
+      }
+    }
+    event.getChannel().sendMessage(new EmbedBuilder()
+        .addField("Item", itemName,false)
+        .addField("Ingredients", ingredients.entrySet().stream()
+            .map(e -> "- " + e.getKey() + " " + e.getValue()).collect(Collectors.joining("\n")),false)
+        .addField("Recipe From", from, false).build()).queue();
+  }
+  @Override
+  protected void messageReactionAdd(MessageReactionAddEvent event) {
+    super.messageReactionAdd(event);
+    if (activeMenus.containsKey(event.getMessageId())) {
+      activeMenus.get(event.getMessageId()).handleReaction(event);
+    }
+  }
+
+
+}
