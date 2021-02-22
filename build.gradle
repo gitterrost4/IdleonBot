@@ -13,7 +13,7 @@ plugins {
 }
 
 version = '0.1'
-mainClassName="Main"
+mainClassName="de.gitterrost4.idleonbot.Main"
 
 dependencies {
     // This dependency is exported to consumers, that is to say found on their compile classpath.
