@@ -91,16 +91,25 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
             if(!builder.isEmpty()) {
               pages.add(builder.build());
             }
-            builder.clear().setAuthor(itemName, itemUrl, imageUrl).setDescription("__***"+th.text()+"***__");
+            String description = th.text();
+            startNewEmbed(builder, itemUrl, itemName, imageUrl, description);
           });
       Optional.ofNullable(row.selectFirst("th")).filter(th -> th.classNames().size() == 0).ifPresent(th -> Optional
-          .ofNullable(row.selectFirst("td")).ifPresent(td -> builder.addField(th.text(), td.text(), true)));
+          .ofNullable(row.selectFirst("td")).ifPresent(td -> {
+            if(builder.isEmpty()) { startNewEmbed(builder, itemUrl, itemName, imageUrl, "General"); }
+            builder.addField(th.text(), td.text(), true);
+          }));
     });
     if(!builder.isEmpty()) {
       pages.add(builder.build());
     }
     PagedEmbed pagedEmbed = new PagedEmbed(pages);
     activePagedEmbeds.put(pagedEmbed.display(event.getChannel()),pagedEmbed);
+  }
+
+  private static void startNewEmbed(EmbedBuilder builder, String itemUrl, String itemName, String imageUrl,
+      String description) {
+    builder.clear().setAuthor(itemName, itemUrl, imageUrl).setDescription("__***"+description+"***__");
   }
 
   @Override
