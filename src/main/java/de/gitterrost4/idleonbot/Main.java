@@ -26,7 +26,6 @@ public class Main extends ListenerAdapter {
     Config.getConfig().getServers().stream().forEach(config -> {
       config.iAddServerModules(jda);
     });
-
   }
 }
 

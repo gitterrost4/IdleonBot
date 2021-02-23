@@ -15,6 +15,10 @@ plugins {
 version = '0.1'
 mainClassName="de.gitterrost4.idleonbot.Main"
 
+configurations.all {
+    resolutionStrategy.cacheDynamicVersionsFor 5, 'seconds'
+}
+
 dependencies {
     // This dependency is exported to consumers, that is to say found on their compile classpath.
     api 'org.apache.commons:commons-math3:3.6.1'
@@ -32,6 +36,7 @@ repositories {
     // You can declare any Maven/Ivy/file repository here.
     jcenter()
     mavenCentral()
+    mavenLocal()
     maven{
       url "https://mymavenrepo.com/repo/QXJWDWuuUKdS20BQUsqk/"
     }
@@ -45,6 +50,6 @@ dependencies {
   compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.6'
   compile 'org.slf4j:slf4j-api:1.7.13'
   compile 'ch.qos.logback:logback-classic:1.2.3'
-  compile 'de.gitterrost4:botlib:2.1.4-SNAPSHOT'
+  compile ('de.gitterrost4:botlib:2.1.5')
   compile 'org.jsoup:jsoup:1.13.1'
 }
