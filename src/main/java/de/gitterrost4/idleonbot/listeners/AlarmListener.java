@@ -1,5 +1,6 @@
 package de.gitterrost4.idleonbot.listeners;
 
+import java.awt.Color;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -37,7 +38,7 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
   public AlarmListener(JDA jda, Guild guild, ServerConfig config) {
     super(jda, guild, config, config.getAlarmConfig(), "alarm");
     connectionHelper.update(
-        "create table if not exists alarm (id INTEGER PRIMARY KEY not null, name text not null UNIQUE, cronexpression text not null, channel text not null, message text not null, lastrun text null, active integer default 1);");
+        "create table if not exists alarm (id INTEGER PRIMARY KEY not null, name text not null UNIQUE, cronexpression text not null, channel text not null, ping text not null, title text not null, message text not null, lastrun text null, active integer default 1);");
     Timer t = new Timer();
     t.scheduleAtFixedRate(new AlarmRunner(), 10000, 10000);
   }
@@ -50,8 +51,10 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
       String channel = guild.getTextChannels().stream().filter(c -> message.getTokenizedArgOrThrow(3).replace("!", "").equals(c.getAsMention().replace("!", "")))
       .findFirst().map(TextChannel::getId).orElseThrow(()->new IllegalArgumentException("channel not found"));
       String cronExpression = message.getTokenizedArgOrThrow(2);
-      String newMessage = message.getTokenizedArgOrThrow(4);
-      Alarm newAlarm = new Alarm(newName, cronExpression, channel, newMessage, ZonedDateTime.now(), connectionHelper, guild);
+      String ping = message.getTokenizedArgOrThrow(4);
+      String title = message.getTokenizedArgOrThrow(5);
+      String newMessage = message.getTokenizedArgOrThrow(6);
+      Alarm newAlarm = new Alarm(newName, cronExpression, channel, ping, title, newMessage, ZonedDateTime.now(), connectionHelper, guild);
       newAlarm.writeToDatabase();
       event.getChannel().sendMessage(newAlarm.toEmbed()).queue();
       break;
@@ -128,19 +131,23 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
     private final String name;
     private final String cronexpression;
     private final String channel;
+    private final String ping;
+    private final String title;
     private final String message;
     private ZonedDateTime lastrun;
     private Boolean active;
     private final ConnectionHelper connectionHelper;
     private final Guild guild;
 
-    private Alarm(Integer id, String name, String cronexpression, String channel, String message, ZonedDateTime lastrun, Boolean active,
+    private Alarm(Integer id, String name, String cronexpression, String channel, String ping, String title, String message, ZonedDateTime lastrun, Boolean active,
         ConnectionHelper connectionHelper, Guild guild) {
       super();
       this.id = id;
       this.name = name;
       this.cronexpression = cronexpression;
       this.channel = channel;
+      this.ping = ping;
+      this.title = title;
       this.message = message;
       this.lastrun = lastrun;
       this.active = active;
@@ -148,15 +155,15 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
       this.guild = guild;
     }
 
-    private Alarm(String name, String cronexpression, String channel, String message, ZonedDateTime lastrun,
+    private Alarm(String name, String cronexpression, String channel, String ping, String title, String message, ZonedDateTime lastrun,
         ConnectionHelper connectionHelper, Guild guild) {
-      this(null,name,cronexpression,channel,message,lastrun,true, connectionHelper,guild);
+      this(null,name,cronexpression,channel,ping,title,message,lastrun,true, connectionHelper,guild);
     }
 
     private void writeToDatabase() {
       connectionHelper.update(
-          "replace into alarm (name, cronexpression, channel, message, lastrun,active) VALUES (?,?,?,?,?,?)", name,
-          cronexpression, channel, message, lastrun,active);
+          "replace into alarm (name, cronexpression, channel, ping, title, message, lastrun,active) VALUES (?,?,?,?,?,?,?,?)", name,
+          cronexpression, channel, ping, title, message, lastrun,active);
       this.id=connectionHelper.getFirstResult("select id from alarm where name=?", rs->rs.getInt("id"), name).orElse(null);
     }
 
@@ -164,17 +171,17 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
       return readAlarmsFromDatabase(connectionHelper, guild,false);
     }
     private static List<Alarm> readAlarmsFromDatabase(ConnectionHelper connectionHelper, Guild guild, Boolean onlyActive) {
-      return connectionHelper.getResults("select id, name, cronexpression, channel, message, lastrun, active from alarm"+(onlyActive?" where active>0":""),
+      return connectionHelper.getResults("select id, name, cronexpression, channel, ping, title, message, lastrun, active from alarm"+(onlyActive?" where active>0":""),
           rs -> new Alarm(rs.getInt("id"), rs.getString("name"), rs.getString("cronexpression"),
-              rs.getString("channel"), rs.getString("message"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
+              rs.getString("channel"), rs.getString("ping"), rs.getString("title"), rs.getString("message"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
               connectionHelper, guild));
     }
 
     private static Optional<Alarm> findByName(String name, ConnectionHelper connectionHelper, Guild guild) {
       return connectionHelper.getFirstResult(
-          "select id, name, cronexpression,channel,message,lastrun,active from alarm where name=?",
+          "select id, name, cronexpression,channel,ping,title,message,lastrun,active from alarm where name=?",
           rs -> new Alarm(rs.getInt("id"), rs.getString("name"), rs.getString("cronexpression"),
-              rs.getString("channel"), rs.getString("message"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
+              rs.getString("channel"), rs.getString("ping"), rs.getString("title"), rs.getString("message"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
               connectionHelper, guild),
           name);
     }
@@ -205,7 +212,7 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
 
     private void run() {
       if (shouldBeRun()) {
-        guild.getTextChannelById(channel).sendMessage(message).queue();
+        guild.getTextChannelById(channel).sendMessage(ping).embed(new EmbedBuilder().setTitle(title).setDescription(message).setColor(Color.ORANGE).build()).queue();
         lastrun = ZonedDateTime.now();
         writeToDatabase();
       }
@@ -224,7 +231,9 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
               true)
           .addField("Active", active?"Yes":"No",true)
           .addField("Channel", guild.getTextChannelById(channel).getAsMention(), false)
-          .addField("Text", message.length() < 100 ? message : message.substring(0, 100), false).build();
+          .addField("Ping", ping, false)
+          .addField("Title", title, false)
+          .addField("Text", message.length() < 100 ? message : message.substring(0, 100)+"...", false).build();
     }
   }
 
