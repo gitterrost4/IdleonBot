@@ -8,7 +8,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Timer;
-import java.util.TimerTask;
 import java.util.stream.Collectors;
 
 import com.cronutils.descriptor.CronDescriptor;
@@ -20,6 +19,7 @@ import com.cronutils.parser.CronParser;
 import de.gitterrost4.botlib.containers.CommandMessage;
 import de.gitterrost4.botlib.containers.PagedEmbed;
 import de.gitterrost4.botlib.database.ConnectionHelper;
+import de.gitterrost4.botlib.helpers.Utilities;
 import de.gitterrost4.botlib.listeners.AbstractMessageListener;
 import de.gitterrost4.idleonbot.config.containers.ServerConfig;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -38,9 +38,12 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
   public AlarmListener(JDA jda, Guild guild, ServerConfig config) {
     super(jda, guild, config, config.getAlarmConfig(), "alarm");
     connectionHelper.update(
-        "create table if not exists alarm (id INTEGER PRIMARY KEY not null, name text not null UNIQUE, cronexpression text not null, channel text not null, ping text not null, title text not null, message text not null, lastrun text null, active integer default 1);");
+        "create table if not exists alarm (id INTEGER PRIMARY KEY not null, name text not null UNIQUE, cronexpression text not null, channel text not null, ping text not null, title text not null, message text not null, durationseconds integer, lastrun text null, active integer default 1);");
     Timer t = new Timer();
-    t.scheduleAtFixedRate(new AlarmRunner(), 10000, 10000);
+    t.scheduleAtFixedRate(
+        Utilities.timerTask(
+            () -> Alarm.readAlarmsFromDatabase(connectionHelper, guild(), true).stream().forEach(alarm -> alarm.run())),
+        10000, 10000);
   }
 
   @Override
@@ -48,36 +51,39 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
     switch (message.getTokenizedArgOrThrow(0)) {
     case "add":
       String newName = message.getTokenizedArgOrThrow(1);
-      String channel = guild.getTextChannels().stream().filter(c -> message.getTokenizedArgOrThrow(3).replace("!", "").equals(c.getAsMention().replace("!", "")))
-      .findFirst().map(TextChannel::getId).orElseThrow(()->new IllegalArgumentException("channel not found"));
       String cronExpression = message.getTokenizedArgOrThrow(2);
-      String ping = message.getTokenizedArgOrThrow(4);
-      String title = message.getTokenizedArgOrThrow(5);
-      String newMessage = message.getTokenizedArgOrThrow(6);
-      Alarm newAlarm = new Alarm(newName, cronExpression, channel, ping, title, newMessage, ZonedDateTime.now(), connectionHelper, guild);
+      Integer durationSeconds = Integer.valueOf(message.getTokenizedArgOrThrow(3));
+      String channel = guild.getTextChannels().stream()
+          .filter(c -> message.getTokenizedArgOrThrow(4).replace("!", "").equals(c.getAsMention().replace("!", "")))
+          .findFirst().map(TextChannel::getId).orElseThrow(() -> new IllegalArgumentException("channel not found"));
+      String ping = message.getTokenizedArgOrThrow(5);
+      String title = message.getTokenizedArgOrThrow(6);
+      String newMessage = message.getTokenizedArgOrThrow(7);
+      Alarm newAlarm = new Alarm(newName, cronExpression, channel, ping, title, newMessage, durationSeconds, ZonedDateTime.now(),
+          connectionHelper, guild);
       newAlarm.writeToDatabase();
       event.getChannel().sendMessage(newAlarm.toEmbed()).queue();
       break;
     case "activate":
       String aName = message.getTokenizedArgOrThrow(1);
-      Alarm.findByName(aName, connectionHelper, guild()).ifPresent(alarm->{
+      Alarm.findByName(aName, connectionHelper, guild()).ifPresent(alarm -> {
         alarm.activate();
         event.getChannel().sendMessage(alarm.toEmbed()).queue();
       });
-      
+
       break;
     case "deactivate":
       String dName = message.getTokenizedArgOrThrow(1);
-      Alarm.findByName(dName, connectionHelper, guild()).ifPresent(alarm->{
+      Alarm.findByName(dName, connectionHelper, guild()).ifPresent(alarm -> {
         alarm.deactivate();
         event.getChannel().sendMessage(alarm.toEmbed()).queue();
-      });      
+      });
       break;
     case "delete":
       String name = message.getTokenizedArgOrThrow(1);
-      Alarm.findByName(name, connectionHelper, guild()).ifPresent(alarm->{
+      Alarm.findByName(name, connectionHelper, guild()).ifPresent(alarm -> {
         alarm.delete();
-        event.getChannel().sendMessage("Alarm "+name+" has been deleted.").queue();
+        event.getChannel().sendMessage("Alarm " + name + " has been deleted.").queue();
       });
       break;
     case "list":
@@ -134,12 +140,14 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
     private final String ping;
     private final String title;
     private final String message;
+    private final Integer durationseconds;
     private ZonedDateTime lastrun;
     private Boolean active;
     private final ConnectionHelper connectionHelper;
     private final Guild guild;
 
-    private Alarm(Integer id, String name, String cronexpression, String channel, String ping, String title, String message, ZonedDateTime lastrun, Boolean active,
+    private Alarm(Integer id, String name, String cronexpression, String channel, String ping, String title,
+        String message, Integer durationseconds, ZonedDateTime lastrun, Boolean active,
         ConnectionHelper connectionHelper, Guild guild) {
       super();
       this.id = id;
@@ -149,39 +157,48 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
       this.ping = ping;
       this.title = title;
       this.message = message;
+      this.durationseconds = durationseconds;
       this.lastrun = lastrun;
       this.active = active;
       this.connectionHelper = connectionHelper;
       this.guild = guild;
     }
 
-    private Alarm(String name, String cronexpression, String channel, String ping, String title, String message, ZonedDateTime lastrun,
-        ConnectionHelper connectionHelper, Guild guild) {
-      this(null,name,cronexpression,channel,ping,title,message,lastrun,true, connectionHelper,guild);
+    private Alarm(String name, String cronexpression, String channel, String ping, String title, String message,
+        Integer durationseconds, ZonedDateTime lastrun, ConnectionHelper connectionHelper, Guild guild) {
+      this(null, name, cronexpression, channel, ping, title, message, durationseconds, lastrun, true, connectionHelper,
+          guild);
     }
 
     private void writeToDatabase() {
       connectionHelper.update(
-          "replace into alarm (name, cronexpression, channel, ping, title, message, lastrun,active) VALUES (?,?,?,?,?,?,?,?)", name,
-          cronexpression, channel, ping, title, message, lastrun,active);
-      this.id=connectionHelper.getFirstResult("select id from alarm where name=?", rs->rs.getInt("id"), name).orElse(null);
+          "replace into alarm (name, cronexpression, channel, ping, title, message, durationseconds, lastrun,active) VALUES (?,?,?,?,?,?,?,?,?)",
+          name, cronexpression, channel, ping, title, message, durationseconds, lastrun, active);
+      this.id = connectionHelper.getFirstResult("select id from alarm where name=?", rs -> rs.getInt("id"), name)
+          .orElse(null);
     }
 
     private static List<Alarm> readAlarmsFromDatabase(ConnectionHelper connectionHelper, Guild guild) {
-      return readAlarmsFromDatabase(connectionHelper, guild,false);
+      return readAlarmsFromDatabase(connectionHelper, guild, false);
     }
-    private static List<Alarm> readAlarmsFromDatabase(ConnectionHelper connectionHelper, Guild guild, Boolean onlyActive) {
-      return connectionHelper.getResults("select id, name, cronexpression, channel, ping, title, message, lastrun, active from alarm"+(onlyActive?" where active>0":""),
+
+    private static List<Alarm> readAlarmsFromDatabase(ConnectionHelper connectionHelper, Guild guild,
+        Boolean onlyActive) {
+      return connectionHelper.getResults(
+          "select id, name, cronexpression, channel, ping, title, message, durationseconds, lastrun, active from alarm"
+              + (onlyActive ? " where active>0" : ""),
           rs -> new Alarm(rs.getInt("id"), rs.getString("name"), rs.getString("cronexpression"),
-              rs.getString("channel"), rs.getString("ping"), rs.getString("title"), rs.getString("message"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
+              rs.getString("channel"), rs.getString("ping"), rs.getString("title"), rs.getString("message"),
+              rs.getInt("durationseconds"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
               connectionHelper, guild));
     }
 
     private static Optional<Alarm> findByName(String name, ConnectionHelper connectionHelper, Guild guild) {
       return connectionHelper.getFirstResult(
-          "select id, name, cronexpression,channel,ping,title,message,lastrun,active from alarm where name=?",
+          "select id, name, cronexpression,channel,ping,title,message,durationseconds,lastrun,active from alarm where name=?",
           rs -> new Alarm(rs.getInt("id"), rs.getString("name"), rs.getString("cronexpression"),
-              rs.getString("channel"), rs.getString("ping"), rs.getString("title"), rs.getString("message"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
+              rs.getString("channel"), rs.getString("ping"), rs.getString("title"), rs.getString("message"),
+              rs.getInt("durationseconds"), ZonedDateTime.parse(rs.getString("lastrun")), rs.getBoolean("active"),
               connectionHelper, guild),
           name);
     }
@@ -191,15 +208,15 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
     }
 
     private void activate() {
-      this.active=true;
+      this.active = true;
       writeToDatabase();
     }
-    
+
     private void deactivate() {
-      this.active=false;
+      this.active = false;
       writeToDatabase();
     }
-    
+
     private boolean shouldBeRun() {
       CronParser parser = getCronParser();
       ExecutionTime time = ExecutionTime.forCron(parser.parse(cronexpression));
@@ -212,7 +229,13 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
 
     private void run() {
       if (shouldBeRun()) {
-        guild.getTextChannelById(channel).sendMessage(ping).embed(new EmbedBuilder().setTitle(title).setDescription(message).setColor(Color.ORANGE).build()).queue();
+        guild.getTextChannelById(channel).sendMessage(ping)
+            .embed(new EmbedBuilder().setTitle(title).setDescription(message).setColor(Color.ORANGE).build())
+            .queue(message -> {
+              if (durationseconds != null && durationseconds > 0) {
+                new Timer().schedule(Utilities.timerTask(() -> message.delete().queue()), durationseconds * 1000);
+              }
+            });
         lastrun = ZonedDateTime.now();
         writeToDatabase();
       }
@@ -223,25 +246,17 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
       return builder.setAuthor(name)
           .addField("Cron Expression",
               cronexpression + "\n("
-                  + CronDescriptor.instance(Locale.US).describe(getCronParser().parse(cronexpression))+")",
+                  + CronDescriptor.instance(Locale.US).describe(getCronParser().parse(cronexpression)) + ")",
               true)
           .addField("Next Execution",
               ExecutionTime.forCron(getCronParser().parse(cronexpression)).nextExecution(lastrun)
                   .map(ZonedDateTime::toString).orElse("unknown"),
               true)
-          .addField("Active", active?"Yes":"No",true)
-          .addField("Channel", guild.getTextChannelById(channel).getAsMention(), false)
-          .addField("Ping", ping, false)
+          .addField("Active", active ? "Yes" : "No", true)
+          .addField("Duration(seconds)", durationseconds.toString(),true)
+          .addField("Channel", guild.getTextChannelById(channel).getAsMention(), false).addField("Ping", ping, false)
           .addField("Title", title, false)
-          .addField("Text", message.length() < 100 ? message : message.substring(0, 100)+"...", false).build();
-    }
-  }
-
-  private class AlarmRunner extends TimerTask {
-
-    @Override
-    public void run() {
-      Alarm.readAlarmsFromDatabase(connectionHelper, guild(), true).stream().forEach(alarm -> alarm.run());
+          .addField("Text", message.length() < 100 ? message : message.substring(0, 100) + "...", false).build();
     }
   }
 
@@ -249,7 +264,5 @@ public class AlarmListener extends AbstractMessageListener<ServerConfig> {
   protected boolean hasAccess(Member member) {
     return isSuperUser(member);
   }
-  
-  
 
 }

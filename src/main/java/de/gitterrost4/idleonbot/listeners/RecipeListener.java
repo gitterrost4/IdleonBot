@@ -19,6 +19,7 @@ import de.gitterrost4.idleonbot.config.containers.ServerConfig;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 
@@ -77,13 +78,14 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
     String from = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
         .filter(tds -> tds.get(0).text().startsWith("Recipe From")).findFirst().map(tds->tds.get(1).text()).orElse("");
     String imageUrl = doc.select(".infobox-image img").attr("src");
+    MessageEmbed mainEmbed = new EmbedBuilder()
+        .addField("Ingredients", ingredients.entrySet().stream()
+            .map(e -> "- " + e.getKey() + " " + e.getValue()).collect(Collectors.joining("\n")), false)
+        .addField("Recipe From", from, false)
+        .setAuthor(itemName, itemUrl, imageUrl)
+        .build();
     event.getChannel()
-        .sendMessage(new EmbedBuilder()
-            .addField("Ingredients", ingredients.entrySet().stream()
-                .map(e -> "- " + e.getKey() + " " + e.getValue()).collect(Collectors.joining("\n")), false)
-            .addField("Recipe From", from, false)
-            .setAuthor(itemName, itemUrl, imageUrl)
-            .build())
+        .sendMessage(mainEmbed)
         .queue();
   }
 
