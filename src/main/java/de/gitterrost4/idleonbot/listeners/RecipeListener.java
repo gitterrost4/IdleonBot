@@ -116,16 +116,16 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
 
     MessageEmbed getItemEmbed() {
       return new EmbedBuilder()
-          .addField("Ingredients",
-              ingredients.stream().map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n")), false)
+          .addField("Ingredients","```"+
+              ingredients.stream().map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n"))+"```", false)
           .addField("Recipe From", recipeFrom, false).setAuthor(name, itemUrl, iconUrl).build();
     }
 
     MessageEmbed getRawIngredientsEmbed() {
-      return new EmbedBuilder().addField("Raw ingredients",
+      return new EmbedBuilder().addField("Raw ingredients","```"+
           getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.name)).entrySet().stream()
               .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
-              .collect(Collectors.joining("\n")),
+              .collect(Collectors.joining("\n"))+"```",
           false).setAuthor(name, itemUrl, iconUrl).build();
     }
 
