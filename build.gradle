@@ -50,7 +50,7 @@ dependencies {
   compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.6'
   compile 'org.slf4j:slf4j-api:1.7.13'
   compile 'ch.qos.logback:logback-classic:1.2.3'
-  compile ('de.gitterrost4:botlib:2.1.9')
+  compile ('de.gitterrost4:botlib:2.1.10')
   compile 'org.jsoup:jsoup:1.13.1'
   compile 'com.cronutils:cron-utils:9.1.3'
 }
