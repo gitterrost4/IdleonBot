@@ -33,7 +33,6 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
   public Map<String, ChoiceMenu> activeMenus = new HashMap<>();
   public Map<String, PagedEmbed> activePagedEmbeds = new HashMap<>();
 
-
   public RecipeListener(JDA jda, Guild guild, ServerConfig config) {
     super(jda, guild, config, config.getRecipeConfig(), "recipe");
     // TODO Auto-generated constructor stub
@@ -55,7 +54,7 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
         showRecipe(event, new MenuEntry(anchors.get(0).text(), anchors.get(0).attr("href")));
       } else {
         ChoiceMenuBuilder menuBuilder = ChoiceMenu.builder();
-        anchors.stream().forEach(anchor->menuBuilder.addEntry(new MenuEntry(anchor.text(), anchor.attr("href"))));
+        anchors.stream().forEach(anchor -> menuBuilder.addEntry(new MenuEntry(anchor.text(), anchor.attr("href"))));
         menuBuilder.setChoiceHandler(menuEntry -> {
           showRecipe(event, menuEntry);
         });
@@ -65,15 +64,16 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
         activeMenus.put(menu.display(event.getChannel()), menu);
       }
     } catch (IOException e) {
-      getLogger().error("Could not connect to the wiki at " + url,e);
+      getLogger().error("Could not connect to the wiki at " + url, e);
     }
   }
 
   private void showRecipe(MessageReceivedEvent event, MenuEntry menuEntry) {
-    String itemName=menuEntry.getDisplay();
-    Ingredient item = new Ingredient(itemName,1);
-    PagedEmbed pagedEmbed = new PagedEmbed(item.getItemEmbed(), item.getRawIngredientsEmbed(),item.getIngredientTreeEmbed());
-    activePagedEmbeds.put(pagedEmbed.display(event.getChannel()),pagedEmbed);
+    String itemName = menuEntry.getDisplay();
+    Ingredient item = new Ingredient(itemName, 1);
+    PagedEmbed pagedEmbed = new PagedEmbed(item.getItemEmbed(), item.getRawIngredientsEmbed(),
+        item.getIngredientTreeEmbed());
+    activePagedEmbeds.put(pagedEmbed.display(event.getChannel()), pagedEmbed);
   }
 
   static class Ingredient {
@@ -83,26 +83,29 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
     private final String iconUrl;
     private final String recipeFrom;
     private final List<Ingredient> ingredients;
-    public Ingredient(String name,Integer count) {
+
+    public Ingredient(String name, Integer count) {
       super();
       this.count = count;
       this.name = name;
-      this.itemUrl = BASE_URL + "/wiki/"+name.replaceAll(" ", "_");
+      this.itemUrl = BASE_URL + "/wiki/" + name.replaceAll(" ", "_");
       Document doc = Catcher.wrap(() -> Jsoup.connect(itemUrl).get());
       Elements rows = doc.select(".forgeslot tr");
       this.ingredients = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
-      .filter(tds -> !tds.get(0).text().startsWith("Anvil Tab") && !tds.get(0).text().startsWith("Recipe From"))
-      .map(tds->new Ingredient(tds.get(0).text(),count*Integer.parseInt(tds.get(1).text().replaceAll("x", ""))))
-      .collect(Collectors.toList());
+          .filter(tds -> !tds.get(0).text().startsWith("Anvil Tab") && !tds.get(0).text().startsWith("Recipe From"))
+          .map(
+              tds -> new Ingredient(tds.get(0).text(), count * Integer.parseInt(tds.get(1).text().replaceAll("x", ""))))
+          .collect(Collectors.toList());
       recipeFrom = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
-          .filter(tds -> tds.get(0).text().startsWith("Recipe From")).findFirst().map(tds->tds.get(1).text()).orElse("");
+          .filter(tds -> tds.get(0).text().startsWith("Recipe From")).findFirst().map(tds -> tds.get(1).text())
+          .orElse("");
       iconUrl = doc.select(".infobox-image img").attr("src");
     }
-    
-    public List<Ingredient> getRawMaterials(){
-      if(ingredients.isEmpty()) {
+
+    private List<Ingredient> getRawMaterials() {
+      if (ingredients.isEmpty()) {
         return Stream.of(this).collect(Collectors.toList());
-      } 
+      }
       return ingredients.stream().map(Ingredient::getRawMaterials).flatMap(List::stream).collect(Collectors.toList());
     }
 
@@ -113,49 +116,47 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
 
     MessageEmbed getItemEmbed() {
       return new EmbedBuilder()
-          .addField("Ingredients", ingredients.stream()
-              .map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n")), false)
-          .addField("Recipe From", recipeFrom, false)
-          .setAuthor(name, itemUrl, iconUrl)
-          .build();
+          .addField("Ingredients",
+              ingredients.stream().map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n")), false)
+          .addField("Recipe From", recipeFrom, false).setAuthor(name, itemUrl, iconUrl).build();
     }
 
     MessageEmbed getRawIngredientsEmbed() {
-      return new EmbedBuilder()
-          .addField("Raw ingredients", getRawMaterials().stream()
-              .map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n")), false)
-          .setAuthor(name, itemUrl, iconUrl)
-          .build();
+      return new EmbedBuilder().addField("Raw ingredients",
+          getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.name)).entrySet().stream()
+              .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
+              .collect(Collectors.joining("\n")),
+          false).setAuthor(name, itemUrl, iconUrl).build();
     }
-    
+
     MessageEmbed getIngredientTreeEmbed() {
       return new EmbedBuilder()
-          .addField("Ingredient Tree", "```"+getTreeStringLines("").stream()
-              .collect(Collectors.joining("\n"))+"```", false)
-          .setAuthor(name, itemUrl, iconUrl)
-          .build();
+          .addField("Ingredient Tree",
+              "```" + getTreeStringLines("").stream().collect(Collectors.joining("\n")) + "```", false)
+          .setAuthor(name, itemUrl, iconUrl).build();
     }
-        
+
     private List<String> getTreeStringLines(String prefix) {
       List<String> result = new ArrayList<>();
       for (int index = 0; index < ingredients.size(); index++) {
         Ingredient ingredient = ingredients.get(index);
         if (index == ingredients.size() - 1) {
-          result.add(prefix + "└── " + ingredient.name+ " x"+ingredient.count);
-          if (ingredient.ingredients.size()>0) {
+          result.add(prefix + "└── " + ingredient.name + " x" + ingredient.count);
+          if (ingredient.ingredients.size() > 0) {
             result.addAll(ingredient.getTreeStringLines(prefix + "    "));
           }
         } else {
-          result.add(prefix + "├── " + ingredient.name+ " x"+ingredient.count);
-          if (ingredient.ingredients.size()>0) {
+          result.add(prefix + "├── " + ingredient.name + " x" + ingredient.count);
+          if (ingredient.ingredients.size() > 0) {
             result.addAll(ingredient.getTreeStringLines(prefix + "│   "));
           }
         }
       }
       return result;
     }
-    
+
   }
+
   @Override
   protected void messageReactionAdd(MessageReactionAddEvent event) {
     super.messageReactionAdd(event);
