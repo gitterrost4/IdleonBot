@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -99,7 +100,7 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       recipeFrom = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
           .filter(tds -> tds.get(0).text().startsWith("Recipe From")).findFirst().map(tds -> tds.get(1).text())
           .orElse("");
-      iconUrl = doc.select(".infobox-image img").attr("src");
+      iconUrl = Optional.ofNullable(doc.select(".infobox-image img").attr("src")).map(String::trim).filter(x->!x.isEmpty()).orElseGet(() -> Optional.ofNullable(doc.select(".HeaderImage img").attr("src")).orElse(null));
     }
 
     private List<Ingredient> getRawMaterials() {

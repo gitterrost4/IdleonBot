@@ -77,7 +77,8 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
       event.getChannel().sendMessage("Couldn't parse wiki page for " + itemName).queue();
       return;
     }
-    String imageUrl = infoBox.select(".infobox-image img").attr("src");
+    String imageUrl = Optional.ofNullable(infoBox.select(".infobox-image img").attr("src")).map(String::trim)
+        .filter(x -> !x.isEmpty()).orElseGet(() -> infoBox.select(".HeaderImage img").attr("src"));
     Elements rows = infoBox.select("tr");
     if (rows.size() == 0) {
       event.getChannel().sendMessage("Item '" + menuEntry.getDisplay() + "' does not appear to have any info.").queue();
@@ -86,30 +87,34 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
     List<MessageEmbed> pages = new ArrayList<>();
     EmbedBuilder builder = new EmbedBuilder();
     rows.forEach(row -> {
-      Optional.ofNullable(row.selectFirst("th.subheader"))
-          .ifPresent(th -> {
-            if(!builder.isEmpty()) {
-              pages.add(builder.build());
+      Optional.ofNullable(row.selectFirst("th.subheader")).ifPresent(th -> {
+        if (!builder.isEmpty()) {
+          pages.add(builder.build());
+        }
+        String description = th.text();
+        startNewEmbed(builder, itemUrl, itemName, imageUrl, description);
+      });
+      Optional.ofNullable(row.selectFirst("th")).filter(th -> th.classNames().size() == 0)
+          .ifPresent(th -> Optional.ofNullable(row.selectFirst("td")).ifPresent(td -> {
+            if (builder.isEmpty()) {
+              startNewEmbed(builder, itemUrl, itemName, imageUrl, "General");
             }
-            String description = th.text();
-            startNewEmbed(builder, itemUrl, itemName, imageUrl, description);
-          });
-      Optional.ofNullable(row.selectFirst("th")).filter(th -> th.classNames().size() == 0).ifPresent(th -> Optional
-          .ofNullable(row.selectFirst("td")).ifPresent(td -> {
-            if(builder.isEmpty()) { startNewEmbed(builder, itemUrl, itemName, imageUrl, "General"); }
             builder.addField(th.text(), td.text(), true);
           }));
     });
-    if(!builder.isEmpty()) {
+    if (!builder.isEmpty()) {
       pages.add(builder.build());
     }
     PagedEmbed pagedEmbed = new PagedEmbed(pages);
-    activePagedEmbeds.put(pagedEmbed.display(event.getChannel()),pagedEmbed);
+    activePagedEmbeds.put(pagedEmbed.display(event.getChannel()), pagedEmbed);
   }
 
   private static void startNewEmbed(EmbedBuilder builder, String itemUrl, String itemName, String imageUrl,
       String description) {
-    builder.clear().setAuthor(itemName, Optional.ofNullable(itemUrl).map(String::trim).filter(x->!x.isEmpty()).orElse(null), Optional.ofNullable(imageUrl).map(String::trim).filter(x->!x.isEmpty()).orElse(null)).setDescription("__***"+description+"***__");
+    builder.clear()
+        .setAuthor(itemName, Optional.ofNullable(itemUrl).map(String::trim).filter(x -> !x.isEmpty()).orElse(null),
+            Optional.ofNullable(imageUrl).map(String::trim).filter(x -> !x.isEmpty()).orElse(null))
+        .setDescription("__***" + description + "***__");
   }
 
   @Override
