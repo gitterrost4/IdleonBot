@@ -109,7 +109,7 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
 
   private static void startNewEmbed(EmbedBuilder builder, String itemUrl, String itemName, String imageUrl,
       String description) {
-    builder.clear().setAuthor(itemName, itemUrl, imageUrl).setDescription("__***"+description+"***__");
+    builder.clear().setAuthor(itemName, Optional.ofNullable(itemUrl).map(String::trim).filter(x->!x.isEmpty()).orElse(null), Optional.ofNullable(imageUrl).map(String::trim).filter(x->!x.isEmpty()).orElse(null)).setDescription("__***"+description+"***__");
   }
 
   @Override
