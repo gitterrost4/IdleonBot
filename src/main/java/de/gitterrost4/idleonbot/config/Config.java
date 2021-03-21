@@ -18,7 +18,9 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator.Feature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 
+import de.gitterrost4.botlib.listeners.BotJoinListener;
 import de.gitterrost4.idleonbot.config.containers.MainConfig;
+import net.dv8tion.jda.api.JDA;
 
 /**
  * global config
@@ -87,6 +89,13 @@ public class Config {
 
   public static MainConfig getConfig() {
     return instance.config;
+  }
+  
+  public static void addListeners(JDA jda) {
+    jda.addEventListener(new BotJoinListener<>(jda, ()->getConfig(), ()->saveConfig())); // Listener for new servers
+    getConfig().getServers().stream().forEach(config -> {
+      config.iAddServerModules(jda);
+    });    
   }
 
 }
