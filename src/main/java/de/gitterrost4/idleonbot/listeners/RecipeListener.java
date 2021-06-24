@@ -114,17 +114,20 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
     }
 
     MessageEmbed getRawIngredientsEmbed() {
+      String lines = getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.baseIngredient.name)).entrySet().stream()
+          .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
+          .collect(Collectors.joining("\n"));
       return new EmbedBuilder().addField("Raw ingredients","```"+
-          getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.baseIngredient.name)).entrySet().stream()
-              .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
-              .collect(Collectors.joining("\n"))+"```",
+          (lines.length()>1000?lines.substring(0, 1000)+"...":lines)+"```",
           false).setAuthor((count>1?count+"x ":"")+baseIngredient.name, baseIngredient.itemUrl, baseIngredient.iconUrl).build();
     }
 
     MessageEmbed getIngredientTreeEmbed() {
+      String treelines = getTreeStringLines("").stream().collect(Collectors.joining("\n"));
+      
       return new EmbedBuilder()
           .addField("Ingredient Tree",
-              "```" + getTreeStringLines("").stream().collect(Collectors.joining("\n")) + "```", false)
+              "```" + (treelines.length()>1000?treelines.substring(0, 1000)+"...":treelines) + "```", false)
           .setAuthor((count>1?count+"x ":"")+baseIngredient.name, baseIngredient.itemUrl, baseIngredient.iconUrl).build();
     }
 
