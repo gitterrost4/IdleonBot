@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
@@ -41,7 +42,10 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
 
   @Override
   protected void messageReceived(MessageReceivedEvent event, CommandMessage message) {
-    String name = message.getArgOrThrow(0, true);
+    Optional<String> oCount=message.getArg(0).filter(StringUtils::isNumeric);
+    Integer count = oCount.map(Integer::parseInt).orElse(1);
+    Integer startIndex = oCount.map(x->1).orElse(0);
+    String name = message.getArgOrThrow(startIndex, true);
     String url = BASE_URL + "/w/index.php?sort=relevance&fulltext=1&search=" + name.replaceAll(" ", "+");
     try {
       Document searchDoc = Jsoup.connect(url).get();
@@ -52,12 +56,12 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       }
       Elements anchors = searchDoc.selectFirst(".searchresults ul").select("a");
       if (anchors.size() == 1) {
-        showRecipe(event, new MenuEntry(anchors.get(0).text(), anchors.get(0).attr("href")));
+        showRecipe(event, new MenuEntry(anchors.get(0).text(), anchors.get(0).attr("href")),count);
       } else {
         ChoiceMenuBuilder menuBuilder = ChoiceMenu.builder();
         anchors.stream().forEach(anchor -> menuBuilder.addEntry(new MenuEntry(anchor.text(), anchor.attr("href"))));
         menuBuilder.setChoiceHandler(menuEntry -> {
-          showRecipe(event, menuEntry);
+          showRecipe(event, menuEntry,count);
         });
         menuBuilder.setTitle("Recipe Search");
 
@@ -69,9 +73,9 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
     }
   }
 
-  private void showRecipe(MessageReceivedEvent event, MenuEntry menuEntry) {
+  private void showRecipe(MessageReceivedEvent event, MenuEntry menuEntry, Integer count) {
     String itemName = menuEntry.getDisplay();
-    Ingredient item = new Ingredient(itemName, 1);
+    Ingredient item = new Ingredient(itemName, count);
     PagedEmbed pagedEmbed = new PagedEmbed(item.getItemEmbed(), item.getRawIngredientsEmbed(),
         item.getIngredientTreeEmbed());
     activePagedEmbeds.put(pagedEmbed.display(event.getChannel()), pagedEmbed);
@@ -119,7 +123,7 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       return new EmbedBuilder()
           .addField("Ingredients","```"+
               ingredients.stream().map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n"))+"```", false)
-          .addField("Recipe From", recipeFrom, false).setAuthor(name, itemUrl, iconUrl).build();
+          .addField("Recipe From", recipeFrom, false).setAuthor((count>1?count+"x ":"")+name, itemUrl, iconUrl).build();
     }
 
     MessageEmbed getRawIngredientsEmbed() {
@@ -127,14 +131,14 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
           getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.name)).entrySet().stream()
               .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
               .collect(Collectors.joining("\n"))+"```",
-          false).setAuthor(name, itemUrl, iconUrl).build();
+          false).setAuthor((count>1?count+"x ":"")+name, itemUrl, iconUrl).build();
     }
 
     MessageEmbed getIngredientTreeEmbed() {
       return new EmbedBuilder()
           .addField("Ingredient Tree",
               "```" + getTreeStringLines("").stream().collect(Collectors.joining("\n")) + "```", false)
-          .setAuthor(name, itemUrl, iconUrl).build();
+          .setAuthor((count>1?count+"x ":"")+name, itemUrl, iconUrl).build();
     }
 
     private List<String> getTreeStringLines(String prefix) {
