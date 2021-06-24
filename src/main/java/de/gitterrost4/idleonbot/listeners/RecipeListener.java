@@ -1,6 +1,7 @@
 package de.gitterrost4.idleonbot.listeners;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,6 +14,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
+
+import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import de.gitterrost4.botlib.containers.ChoiceMenu;
 import de.gitterrost4.botlib.containers.ChoiceMenu.ChoiceMenuBuilder;
@@ -34,7 +38,9 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
   private static final String BASE_URL = "https://idleon.info";
   public Map<String, ChoiceMenu> activeMenus = new HashMap<>();
   public Map<String, PagedEmbed> activePagedEmbeds = new HashMap<>();
-
+  public static AsyncLoadingCache<String, BaseIngredient> ingredientCache = Caffeine.newBuilder().refreshAfterWrite(Duration.ofHours(1)).buildAsync(name->new BaseIngredient(name));
+  
+  
   public RecipeListener(JDA jda, Guild guild, ServerConfig config) {
     super(jda, guild, config, config.getRecipeConfig(), "recipe");
     // TODO Auto-generated constructor stub
@@ -75,31 +81,96 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
 
   private void showRecipe(MessageReceivedEvent event, MenuEntry menuEntry, Integer count) {
     String itemName = menuEntry.getDisplay();
-    Ingredient item = new Ingredient(itemName, count);
+    ingredientCache.get(itemName).thenAccept(ing->{
+    Ingredient item = new Ingredient(count,ing);
     PagedEmbed pagedEmbed = new PagedEmbed(item.getItemEmbed(), item.getRawIngredientsEmbed(),
         item.getIngredientTreeEmbed());
     activePagedEmbeds.put(pagedEmbed.display(event.getChannel()), pagedEmbed);
+    });
   }
 
-  static class Ingredient {
+  static class Ingredient{
     private final Integer count;
+    private final BaseIngredient baseIngredient;
+    
+    public Ingredient(Integer count, BaseIngredient ingredient) {
+      super();
+      this.count = count;
+      this.baseIngredient = ingredient;
+    }
+    
+    private List<Ingredient> getRawMaterials() {
+      if (baseIngredient.ingredients.isEmpty()) {
+        return Stream.of(this).collect(Collectors.toList());
+      }
+      return baseIngredient.ingredients.stream().map(x->new Ingredient(count*x.count,x.baseIngredient)).map(x->x.getRawMaterials()).flatMap(List::stream).collect(Collectors.toList());
+    }
+    
+    MessageEmbed getItemEmbed() {
+      return new EmbedBuilder()
+          .addField("Ingredients","```"+
+              baseIngredient.ingredients.stream().map(e -> "- " + e.baseIngredient.name + " x" + count*e.count).collect(Collectors.joining("\n"))+"```", false)
+          .addField("Recipe From", baseIngredient.recipeFrom, false).setAuthor((count>1?count+"x ":"")+baseIngredient.name, baseIngredient.itemUrl, baseIngredient.iconUrl).build();
+    }
+
+    MessageEmbed getRawIngredientsEmbed() {
+      return new EmbedBuilder().addField("Raw ingredients","```"+
+          getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.baseIngredient.name)).entrySet().stream()
+              .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
+              .collect(Collectors.joining("\n"))+"```",
+          false).setAuthor((count>1?count+"x ":"")+baseIngredient.name, baseIngredient.itemUrl, baseIngredient.iconUrl).build();
+    }
+
+    MessageEmbed getIngredientTreeEmbed() {
+      return new EmbedBuilder()
+          .addField("Ingredient Tree",
+              "```" + getTreeStringLines("").stream().collect(Collectors.joining("\n")) + "```", false)
+          .setAuthor((count>1?count+"x ":"")+baseIngredient.name, baseIngredient.itemUrl, baseIngredient.iconUrl).build();
+    }
+
+    private List<String> getTreeStringLines(String prefix) {
+      List<String> result = new ArrayList<>();
+      for (int index = 0; index < baseIngredient.ingredients.size(); index++) {
+        Ingredient currentIngredient = baseIngredient.ingredients.get(index);
+        Ingredient ingred = new Ingredient(count*currentIngredient.count, currentIngredient.baseIngredient);
+        if (index == baseIngredient.ingredients.size() - 1) {
+          result.add(prefix + "└── " + ingred.baseIngredient.name + " x" + ingred.count);
+          if (ingred.baseIngredient.ingredients.size() > 0) {
+            result.addAll(ingred.getTreeStringLines(prefix + "    "));
+          }
+        } else {
+          result.add(prefix + "├── " + ingred.baseIngredient.name + " x" + ingred.count);
+          if (ingred.baseIngredient.ingredients.size() > 0) {
+            result.addAll(ingred.getTreeStringLines(prefix + "│   "));
+          }
+        }
+      }
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "Ingredient [count=" + count + ", ingredient=" + baseIngredient + "]";
+    }
+  }
+  
+  static class BaseIngredient {
     private final String name;
     private final String itemUrl;
     private final String iconUrl;
     private final String recipeFrom;
     private final List<Ingredient> ingredients;
 
-    public Ingredient(String name, Integer count) {
+    public BaseIngredient(String name) {
       super();
-      this.count = count;
       this.name = name;
       this.itemUrl = BASE_URL + "/wiki/" + name.replaceAll(" ", "_");
       Document doc = Catcher.wrap(() -> Jsoup.connect(itemUrl).get());
       Elements rows = doc.select(".forgeslot tr");
       this.ingredients = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
           .filter(tds -> !tds.get(0).text().startsWith("Anvil Tab") && !tds.get(0).text().startsWith("Recipe From"))
-          .map(
-              tds -> new Ingredient(tds.get(0).text(), count * Integer.parseInt(tds.get(1).text().replaceAll("x", ""))))
+          .map(tds -> new Ingredient(Integer.parseInt(tds.get(1).text().replaceAll("x", "")),
+              Catcher.wrap(() -> ingredientCache.get(tds.get(0).text()).get())))
           .collect(Collectors.toList());
       recipeFrom = rows.stream().map(row -> row.select("td")).filter(tds -> tds.size() == 2)
           .filter(tds -> tds.get(0).text().startsWith("Recipe From")).findFirst().map(tds -> tds.get(1).text())
@@ -107,58 +178,11 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       iconUrl = Optional.ofNullable(doc.select(".infobox-image img").attr("src")).map(String::trim).filter(x->!x.isEmpty()).orElseGet(() -> Optional.ofNullable(doc.select(".HeaderImage img").attr("src")).orElse(null));
     }
 
-    private List<Ingredient> getRawMaterials() {
-      if (ingredients.isEmpty()) {
-        return Stream.of(this).collect(Collectors.toList());
-      }
-      return ingredients.stream().map(Ingredient::getRawMaterials).flatMap(List::stream).collect(Collectors.toList());
-    }
-
     @Override
     public String toString() {
-      return "Ingredient [count=" + count + ", name=" + name + ", ingredients=" + ingredients + "]";
+      return "BaseIngredient [name=" + name + ", ingredients=" + ingredients + "]";
     }
 
-    MessageEmbed getItemEmbed() {
-      return new EmbedBuilder()
-          .addField("Ingredients","```"+
-              ingredients.stream().map(e -> "- " + e.name + " x" + e.count).collect(Collectors.joining("\n"))+"```", false)
-          .addField("Recipe From", recipeFrom, false).setAuthor((count>1?count+"x ":"")+name, itemUrl, iconUrl).build();
-    }
-
-    MessageEmbed getRawIngredientsEmbed() {
-      return new EmbedBuilder().addField("Raw ingredients","```"+
-          getRawMaterials().stream().collect(Collectors.groupingBy(i -> i.name)).entrySet().stream()
-              .map(e -> "- " + e.getKey() + " x" + e.getValue().stream().map(i -> i.count).reduce(0, (a, b) -> a + b))
-              .collect(Collectors.joining("\n"))+"```",
-          false).setAuthor((count>1?count+"x ":"")+name, itemUrl, iconUrl).build();
-    }
-
-    MessageEmbed getIngredientTreeEmbed() {
-      return new EmbedBuilder()
-          .addField("Ingredient Tree",
-              "```" + getTreeStringLines("").stream().collect(Collectors.joining("\n")) + "```", false)
-          .setAuthor((count>1?count+"x ":"")+name, itemUrl, iconUrl).build();
-    }
-
-    private List<String> getTreeStringLines(String prefix) {
-      List<String> result = new ArrayList<>();
-      for (int index = 0; index < ingredients.size(); index++) {
-        Ingredient ingredient = ingredients.get(index);
-        if (index == ingredients.size() - 1) {
-          result.add(prefix + "└── " + ingredient.name + " x" + ingredient.count);
-          if (ingredient.ingredients.size() > 0) {
-            result.addAll(ingredient.getTreeStringLines(prefix + "    "));
-          }
-        } else {
-          result.add(prefix + "├── " + ingredient.name + " x" + ingredient.count);
-          if (ingredient.ingredients.size() > 0) {
-            result.addAll(ingredient.getTreeStringLines(prefix + "│   "));
-          }
-        }
-      }
-      return result;
-    }
 
   }
 
