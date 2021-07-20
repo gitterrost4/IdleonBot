@@ -3,9 +3,11 @@ package de.gitterrost4.idleonbot.config.containers;
 import java.util.Optional;
 
 import de.gitterrost4.botlib.config.containers.modules.ModuleConfig;
+import de.gitterrost4.idleonbot.config.containers.modules.IgnConfig;
 import de.gitterrost4.idleonbot.config.containers.modules.LavaTrapConfig;
 import de.gitterrost4.idleonbot.config.containers.modules.RecipeConfig;
 import de.gitterrost4.idleonbot.config.containers.modules.WikiConfig;
+import de.gitterrost4.idleonbot.listeners.IgnListener;
 import de.gitterrost4.idleonbot.listeners.LavaTrapListener;
 import de.gitterrost4.idleonbot.listeners.RecipeListener;
 import de.gitterrost4.idleonbot.listeners.WikiListener;
@@ -17,10 +19,11 @@ public class ServerConfig extends de.gitterrost4.botlib.config.containers.Server
   private RecipeConfig recipeConfig;
   private WikiConfig wikiConfig;
   private LavaTrapConfig lavaTrapConfig;
+  private IgnConfig ignConfig;
   
   @Override
   public String toString() {
-    return "ServerConfig [recipeConfig=" + recipeConfig + ", wikiConfig=" + wikiConfig + ", alarmConfig=" + getAlarmConfig()
+    return "ServerConfig [recipeConfig=" + recipeConfig + ",ignConfig=" + ignConfig + ", wikiConfig=" + wikiConfig + ", alarmConfig=" + getAlarmConfig()
         + ", getSuperUserRoles()=" + getSuperUserRoles() + ", getName()=" + getName() + ", getServerId()="
         + getServerId() + ", getBotPrefixes()=" + getBotPrefixes() + ", getDatabaseFileName()=" + getDatabaseFileName()
         + ", getHelpConfig()=" + getHelpConfig() + "]";
@@ -37,6 +40,10 @@ public class ServerConfig extends de.gitterrost4.botlib.config.containers.Server
   public LavaTrapConfig getLavaTrapConfig() {
     return lavaTrapConfig;
   }
+  
+  public IgnConfig getIgnConfig() {
+    return ignConfig;
+  }
 
   @Override
   protected void addServerModules(JDA jda, Guild guild, de.gitterrost4.botlib.listeners.ListenerManager manager) {
@@ -48,6 +55,9 @@ public class ServerConfig extends de.gitterrost4.botlib.config.containers.Server
     }
     if (Optional.ofNullable(getLavaTrapConfig()).map(ModuleConfig::isEnabled).orElse(false)) {
       manager.addEventListener(new LavaTrapListener(jda, guild, this));
+    }
+    if (Optional.ofNullable(getIgnConfig()).map(ModuleConfig::isEnabled).orElse(false)) {
+      manager.addEventListener(new IgnListener(jda, guild, this));
     }
   }
 
