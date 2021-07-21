@@ -7,7 +7,6 @@ import de.gitterrost4.botlib.listeners.AbstractMessageListener;
 import de.gitterrost4.idleonbot.config.containers.ServerConfig;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 
 public class IgnListener extends AbstractMessageListener<ServerConfig> {
@@ -37,6 +36,14 @@ public class IgnListener extends AbstractMessageListener<ServerConfig> {
               rs -> rs.getString("discordid"), ign)
               .map(discordId -> ign + " is the IGN of: " + guild().getMemberById(discordId).getAsMention())
               .orElse(ign + " is unknown to me."))
+          .queue();
+      return;
+    }
+    if (message.getArg(0).filter(x -> x.equals("showall")).isPresent()) {
+      event.getChannel()
+          .sendMessage(connectionHelper.getResults("select discordid,ign from idleonign",
+              rs -> rs.getString("ign") + " is the IGN of: " + guild().getMemberById(rs.getString("discordid")).getAsMention()).stream()
+              .collect(Collectors.joining("\n")))
           .queue();
       return;
     }
