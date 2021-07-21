@@ -1,6 +1,9 @@
 package de.gitterrost4.idleonbot.listeners;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import de.gitterrost4.botlib.containers.CommandMessage;
 import de.gitterrost4.botlib.listeners.AbstractMessageListener;
@@ -40,11 +43,12 @@ public class IgnListener extends AbstractMessageListener<ServerConfig> {
       return;
     }
     if (message.getArg(0).filter(x -> x.equals("showall")).isPresent()) {
-      event.getChannel()
-          .sendMessage(connectionHelper.getResults("select discordid,ign from idleonign",
-              rs -> rs.getString("ign") + " is the IGN of: " + guild().getMemberById(rs.getString("discordid")).getAsMention()).stream()
-              .collect(Collectors.joining("\n")))
-          .queue();
+      splitString(connectionHelper
+          .getResults("select discordid,ign from idleonign",
+              rs -> rs.getString("ign") + " is the IGN of: "
+                  + guild().getMemberById(rs.getString("discordid")).getAsMention())
+          .stream().collect(Collectors.joining("\n")), 2000).stream()
+              .forEach(msg -> event.getChannel().sendMessage(msg).queue());
       return;
     }
     String ign = message.getArgOrThrow(0, true);
@@ -53,4 +57,16 @@ public class IgnListener extends AbstractMessageListener<ServerConfig> {
     connectionHelper.update("replace into idleonign (discordid, ign) VALUES (?,?)", event.getAuthor().getId(), ign);
   }
 
+  private static List<String> splitString(String string, Integer limit) {
+    if (string.length() < limit) {
+      return Stream.of(string).collect(Collectors.toList());
+    }
+    List<String> result = new ArrayList<>();
+    while (string.length() >= limit) {
+      result.add(0, string.substring(string.indexOf("\n", string.length() - limit) + 1));
+      string = string.substring(0, string.indexOf("\n", string.length() - limit) + 1);
+    }
+    result.add(0, string);
+    return result;
+  }
 }
