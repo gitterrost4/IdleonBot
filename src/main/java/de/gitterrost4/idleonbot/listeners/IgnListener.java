@@ -2,10 +2,12 @@ package de.gitterrost4.idleonbot.listeners;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import de.gitterrost4.botlib.containers.CommandMessage;
+import de.gitterrost4.botlib.helpers.Catcher;
 import de.gitterrost4.botlib.listeners.AbstractMessageListener;
 import de.gitterrost4.idleonbot.config.containers.ServerConfig;
 import net.dv8tion.jda.api.JDA;
@@ -45,9 +47,9 @@ public class IgnListener extends AbstractMessageListener<ServerConfig> {
     if (message.getArg(0).filter(x -> x.equals("showall")).isPresent()) {
       splitString(connectionHelper
           .getResults("select discordid,ign from idleonign",
-              rs -> rs.getString("ign") + " is the IGN of: "
-                  + guild().getMemberById(rs.getString("discordid")).getAsMention())
-          .stream().collect(Collectors.joining("\n")), 2000).stream()
+              rs -> Optional.ofNullable(guild().getMemberById(rs.getString("discordid"))).map(member->Catcher.wrap(()->rs.getString("ign") + " is the IGN of: "
+                  + member.getAsMention())))
+          .stream().filter(Optional::isPresent).map(Optional::get).collect(Collectors.joining("\n")), 2000).stream()
               .forEach(msg -> event.getChannel().sendMessage(msg).queue());
       return;
     }

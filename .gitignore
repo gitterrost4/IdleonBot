@@ -44,3 +44,4 @@ token.secret
 *.db
 *.log
 /bin/
+sheets-credentials.json

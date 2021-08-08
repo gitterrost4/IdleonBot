@@ -10,6 +10,7 @@ import de.gitterrost4.idleonbot.config.containers.modules.WikiConfig;
 import de.gitterrost4.idleonbot.listeners.IgnListener;
 import de.gitterrost4.idleonbot.listeners.LavaTrapListener;
 import de.gitterrost4.idleonbot.listeners.RecipeListener;
+import de.gitterrost4.idleonbot.listeners.SheetTestListener;
 import de.gitterrost4.idleonbot.listeners.WikiListener;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
@@ -59,6 +60,7 @@ public class ServerConfig extends de.gitterrost4.botlib.config.containers.Server
     if (Optional.ofNullable(getIgnConfig()).map(ModuleConfig::isEnabled).orElse(false)) {
       manager.addEventListener(new IgnListener(jda, guild, this));
     }
+    manager.addEventListener(new SheetTestListener(jda, guild, this));
   }
 
 }
