@@ -1,9 +1,7 @@
 package de.gitterrost4.idleonbot.listeners;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -24,14 +22,9 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 
 public class RecipeListener extends AbstractMessageListener<ServerConfig> {
 
-  public Map<String, ChoiceMenu> activeMenus = new HashMap<>();
-  public Map<String, PagedEmbed> activePagedEmbeds = new HashMap<>();
-  
-  
   public RecipeListener(JDA jda, Guild guild, ServerConfig config) {
     super(jda, guild, config, config.getRecipeConfig(), "recipe");
     // TODO Auto-generated constructor stub
@@ -58,14 +51,14 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
       menuBuilder.setTitle("Recipe Search");
 
       ChoiceMenu menu = menuBuilder.build();
-      activeMenus.put(menu.display(event.getChannel()), menu);
+      menu.display(event.getChannel());
     }
   }
   
   private void showRecipe(MessageReceivedEvent event, Item item, Integer count) {
     de.gitterrost4.idleonbot.itemManager.Ingredient ing = new de.gitterrost4.idleonbot.itemManager.Ingredient(count, item.getId());
     PagedEmbed pagedEmbed = new PagedEmbed(getItemEmbed(ing),getRawIngredientsEmbed(ing),getIngredientTreeEmbed(ing));
-    activePagedEmbeds.put(pagedEmbed.display(event.getChannel()), pagedEmbed);
+    pagedEmbed.display(event.getChannel());
   }
   
   MessageEmbed getItemEmbed(de.gitterrost4.idleonbot.itemManager.Ingredient item) {
@@ -128,17 +121,6 @@ public class RecipeListener extends AbstractMessageListener<ServerConfig> {
         .addField("Ingredient Tree",
             "```" + (treelines.length()>1000?treelines.substring(0, 1000)+"...":treelines) + "```", false)
         .setAuthor((item.getCount()>1?item.getCount()+"x ":"")+ItemList.instance.getItems().get(item.getItemId()).getName(), null, null).build();
-  }
-
-  @Override
-  protected void messageReactionAdd(MessageReactionAddEvent event) {
-    super.messageReactionAdd(event);
-    if (activeMenus.containsKey(event.getMessageId())) {
-      activeMenus.get(event.getMessageId()).handleReaction(event);
-    }
-    if (activePagedEmbeds.containsKey(event.getMessageId())) {
-      activePagedEmbeds.get(event.getMessageId()).handleReaction(event);
-    }
   }
 
   @Override

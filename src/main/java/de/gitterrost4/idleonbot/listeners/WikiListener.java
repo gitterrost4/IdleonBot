@@ -2,9 +2,7 @@ package de.gitterrost4.idleonbot.listeners;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.jsoup.Jsoup;
@@ -25,12 +23,8 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 
 public class WikiListener extends AbstractMessageListener<ServerConfig> {
-
-  public Map<String, ChoiceMenu> activeMenus = new HashMap<>();
-  public Map<String, PagedEmbed> activePagedEmbeds = new HashMap<>();
 
   public WikiListener(JDA jda, Guild guild, ServerConfig config) {
     super(jda, guild, config, config.getWikiConfig(), "wiki");
@@ -61,14 +55,14 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
         menuBuilder.setTitle("Recipe Search");
 
         ChoiceMenu menu = menuBuilder.build();
-        activeMenus.put(menu.display(event.getChannel()), menu);
+        menu.display(event.getChannel());
       }
     } catch (IOException e) {
       getLogger().error("Could not connect to the wiki at " + url, e);
     }
   }
 
-  private void showWiki(MessageReceivedEvent event, String baseUrl, MenuEntry menuEntry) {
+  private static void showWiki(MessageReceivedEvent event, String baseUrl, MenuEntry menuEntry) {
     String itemUrl = baseUrl + menuEntry.getValue();
     Document doc = Catcher.wrap(() -> Jsoup.connect(itemUrl).get());
     String itemName = doc.selectFirst("#firstHeading").text();
@@ -106,7 +100,7 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
       pages.add(builder.build());
     }
     PagedEmbed pagedEmbed = new PagedEmbed(pages);
-    activePagedEmbeds.put(pagedEmbed.display(event.getChannel()), pagedEmbed);
+    pagedEmbed.display(event.getChannel());
   }
 
   private static void startNewEmbed(EmbedBuilder builder, String itemUrl, String itemName, String imageUrl,
@@ -115,17 +109,6 @@ public class WikiListener extends AbstractMessageListener<ServerConfig> {
         .setAuthor(itemName, Optional.ofNullable(itemUrl).map(String::trim).filter(x -> !x.isEmpty()).orElse(null),
             Optional.ofNullable(imageUrl).map(String::trim).filter(x -> !x.isEmpty()).orElse(null))
         .setDescription("__***" + description + "***__");
-  }
-
-  @Override
-  protected void messageReactionAdd(MessageReactionAddEvent event) {
-    super.messageReactionAdd(event);
-    if (activeMenus.containsKey(event.getMessageId())) {
-      activeMenus.get(event.getMessageId()).handleReaction(event);
-    }
-    if (activePagedEmbeds.containsKey(event.getMessageId())) {
-      activePagedEmbeds.get(event.getMessageId()).handleReaction(event);
-    }
   }
 
   @Override
